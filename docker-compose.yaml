@@ -11,9 +11,9 @@ services:
       - ./email-agent:/app
     labels:
       - traefik.enable=true
-      - traefik.http.routers.recallrai-backend.rule=Host(`email-agent-demo.recallrai.com`)
-      - traefik.http.routers.recallrai-backend.entrypoints=recallrai
-      - traefik.http.services.recallrai-backend.loadbalancer.server.port=80
+      - traefik.http.routers.recallrai-demo-email-agent.rule=Host(`email-agent-demo.recallrai.com`)
+      - traefik.http.routers.recallrai-demo-email-agent.entrypoints=recallrai
+      - traefik.http.services.recallrai-demo-email-agent.loadbalancer.server.port=80
     networks:
       - recallrai_prod
 
