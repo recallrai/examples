@@ -1,0 +1,19 @@
+services:
+  recallrai-demo-email-agent:
+    image: recallrai/recallrai-demo-email-agent:latest
+    restart: unless-stopped
+    build:
+      context: email-agent
+      dockerfile: Dockerfile
+    command: streamlit run main.py --server.port 80
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.recallrai-backend.rule=Host(`email-agent.demo.recallrai.com`)
+      - traefik.http.routers.recallrai-backend.entrypoints=recallrai
+      - traefik.http.services.recallrai-backend.loadbalancer.server.port=80
+    networks:
+      - recallrai_prod
+
+networks:
+  recallrai_prod:
+    external: true
