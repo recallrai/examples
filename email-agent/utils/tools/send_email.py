@@ -1,6 +1,6 @@
 from azure.communication.email import EmailClient
 from azure.core.credentials import AzureKeyCredential
-from .models import SendEmailRequest
+from utils.models import SendEmailRequest
 from config import get_settings
 
 settings = get_settings()
