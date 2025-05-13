@@ -5,7 +5,13 @@ from config import get_settings
 
 settings = get_settings()
 
-def send_email(self, data: SendEmailRequest) -> bool:
+credential = AzureKeyCredential(settings.ACS_KEY)
+acs_client = EmailClient(
+    endpoint=settings.ACS_ENDPOINT,
+    credential=credential
+)
+
+def send_email(data: SendEmailRequest) -> bool:
     message = {
         "senderAddress": settings.ACS_EMAIL,
         "recipients": {
@@ -17,7 +23,7 @@ def send_email(self, data: SendEmailRequest) -> bool:
         }
     }
     
-    poller = self.client.begin_send(message)
+    poller = acs_client.begin_send(message)
     result = poller.result()
     
     return result["status"] == "Succeeded"

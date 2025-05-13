@@ -8,6 +8,7 @@
         "**/node_modules": true,
         "**/poetry.lock": true,
         "**/.venv": true,
+        "**/__pycache__": true,
         ".vscode": true,
     }
 }
