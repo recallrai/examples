@@ -279,7 +279,7 @@ with col2:
                         st.session_state.messages.append(function_call_msg)
                         
                         # Add function call to RecallrAI session
-                        session.add_assistant_message(f"Function call: {function_name} with args: {function_args}")
+                        # session.add_assistant_message(f"Function call: {function_name} with args: {function_args}")
                         
                         # Call the model again with the function result
                         messages_for_api.append({
