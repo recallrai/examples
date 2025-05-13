@@ -14,6 +14,7 @@ RUN pip install poetry
 # Copy only requirements to cache them in docker layer
 COPY pyproject.toml poetry.lock* /app/
 
-# Project initialization:
+# Project initialization
+# FIXME: don't know why --no-root is needed
 RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi
+    && poetry install --no-interaction --no-ansi --no-root

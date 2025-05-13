@@ -6,7 +6,7 @@ authors = [
     {name = "Devasheesh Mishra",email = "devasheeshmishra4@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">3.12,<4.0"
+requires-python = ">3.10,<4.0"
 package-mode = false
 dependencies = [
     "recallrai (>=0.1.1,<0.2.0)",
