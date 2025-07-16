@@ -6,14 +6,14 @@ authors = [
     {name = "Devasheesh Mishra",email = "devasheeshmishra4@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">3.10,<4.0"
+requires-python = ">3.10,<3.14"
 package-mode = false
 dependencies = [
-    "recallrai (>=0.1.1,<0.2.0)",
     "openai (>=1.78.1,<2.0.0)",
     "pydantic-settings (>=2.9.1,<3.0.0)",
     "colorlog (>=6.9.0,<7.0.0)",
-    "fastapi (>=0.116.1,<0.117.0)"
+    "fastapi (>=0.116.1,<0.117.0)",
+    "recallrai (>=0.2.0,<0.3.0)"
 ]
 
 [build-system]

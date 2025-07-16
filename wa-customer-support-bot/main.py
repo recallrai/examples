@@ -3,7 +3,7 @@ from config import get_settings
 from logger import get_logger
 from fastapi import FastAPI, HTTPException
 from models import WebhookData, WebhookResponse, WatiSendMessageRequest, WatiApiResponse, HealthResponse
-from typing import Optional
+from typing import Optional, List, Dict
 from recallrai import RecallrAI
 from recallrai.models import SessionStatus
 from recallrai.exceptions import UserNotFoundError
@@ -42,6 +42,48 @@ async def send_whatsapp_message(data: WatiSendMessageRequest) -> WatiApiResponse
         else:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
+async def get_all_messages(phone_number: str) -> List[Dict[str, str]]:
+    """Get all messages for a given phone number and format them for LLM input"""
+    url = f"{settings.WATI_BASE_URL}/getMessages/{phone_number}"
+    headers = {
+        "Authorization": settings.WATI_API_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        logger.info(f"Response from WATI: {response.status_code} - {response.text}")
+        
+        if response.status_code == 200:
+            # Parse the response
+            data = response.json()
+            messages = data.get('messages', {}).get('items', [])
+            
+            # Filter for actual messages and convert to role-content pairs
+            formatted_messages = []
+            for msg in messages:
+                # Skip non-message events or messages without text
+                if msg.get('eventType') != 'message' or not msg.get('text'):
+                    continue
+                
+                # Determine role based on owner field
+                # owner=True means the message is from the assistant
+                # owner=False means the message is from the user
+                role = "assistant" if msg.get('owner', False) else "user"
+                
+                # Add to formatted messages
+                formatted_messages.append({
+                    "role": role,
+                    "content": msg.get('text')
+                })
+            
+            # Reverse to get chronological order (oldest first)
+            formatted_messages.reverse()
+            
+            return formatted_messages
+        else:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+
 async def process_user_message(phone_number: str, message_text: str, reply_context_id: Optional[str] = None) -> str:
     """Process incoming WhatsApp message"""
     user_id = f"whatsapp_{phone_number}_prod"
@@ -66,13 +108,16 @@ async def process_user_message(phone_number: str, message_text: str, reply_conte
     # Add user message to Recallr AI
     session.add_user_message(message_text)
     
-    # Get previous messages in the session (if any)
+    # Recallr AI Approach: Get previous messages in the unprocessed session (if any)
     previous_messages = []
     for message in session.get_messages():
         previous_messages.append({
             "role": message.role,
             "content": message.content,
         })
+    
+    # Direct Approach: Get all messages from WATI for the phone number
+    # previous_messages = get_all_messages(phone_number)
     
     # Get context from RecallrAI
     context = session.get_context()
@@ -120,6 +165,7 @@ Only give short and concise responses, avoiding unnecessary details."""
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
+            *previous_messages,
         ],
         temperature=0.3,
         max_tokens=500
