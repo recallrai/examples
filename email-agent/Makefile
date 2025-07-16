@@ -42,11 +42,11 @@ clean:
 pull:
 	git pull origin main
 
-deploy: down git_pull build up logs
+deploy: down pull build up logs
 	@echo "Deployment complete"
 
 restart: down up logs
 	@echo "Application reloaded"
 
-refresh: down git_pull up logs
+refresh: down pull up logs
 	@echo "Application reloaded"
