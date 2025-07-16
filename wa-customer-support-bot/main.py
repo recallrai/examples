@@ -186,6 +186,53 @@ Only give short and concise responses, avoiding unnecessary details."""
     
     return assistant_message
 
+async def check_if_message_processed(phone_number: str, message_id: str) -> bool:
+    """
+    Check if we've already processed and replied to this message
+    
+    Args:
+        phone_number: The user's phone number
+        message_id: The WhatsApp message ID to check
+        
+    Returns:
+        bool: True if the message has already been processed, False otherwise
+    """
+    url = f"{settings.WATI_BASE_URL}/getMessages/{phone_number}"
+    headers = {
+        "Authorization": settings.WATI_API_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            messages: List[Dict] = data.get('messages', {}).get('items', [])
+            
+            # Theese messages are in reverse chronological order, so we need to check from the oldest to the newest
+            # Reverse the messages to check from oldest to newest
+            messages.reverse()
+            
+            # Look for the user's message with the given ID
+            user_message_found = False
+            for msg in messages:
+                if msg.get('id') == message_id:
+                    user_message_found = True
+                    logger.info(f"Found user message {message_id} from {phone_number}")
+                
+                # If we found the user message, check if there's an assistant message right after it
+                # This indicates we've already processed this message
+                if user_message_found and msg.get('owner', False) == True:
+                    logger.info(f"Message {message_id} has already been processed")
+                    return True
+            
+            return False
+        else:
+            # In case of error, proceed with processing to avoid missing messages
+            logger.warning(f"Error checking message status: {response.status_code}")
+            return False
+
 @app.post("/webhook", response_model=WebhookResponse)
 async def wati_webhook(data: WebhookData) -> WebhookResponse:
     """Webhook to receive WATI messages"""
@@ -197,6 +244,15 @@ async def wati_webhook(data: WebhookData) -> WebhookResponse:
             if phone_number not in settings.ALLOWED_PHONE_NUMBERS:
                 logger.info(f"Ignoring message from phone number: {phone_number}")
                 return WebhookResponse(status="ignored", reason="phone number not allowed")
+            
+            # BUG: WATI has a bug that if a webhook delivery fails, it retries indefinitely.
+            # This can lead to duplicate processing of the same message.
+            # To mitigate this, we get all the messages of the user and check if we have sent a reply to that message, using whatsappMessageId.
+            message_id = data.id
+            already_processed = await check_if_message_processed(phone_number, message_id)
+            if already_processed:
+                logger.info(f"Skipping already processed message {message_id} from {phone_number}")
+                return WebhookResponse(status="ignored", reason="message already processed")
             
             logger.info(f"Received webhook data: {data.model_dump_json()}")
 
