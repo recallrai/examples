@@ -17,6 +17,7 @@ app = FastAPI(title="WhatsApp Customer Support Bot with WATI Integration", versi
 rai_client = RecallrAI(
     api_key=settings.RECALLRAI_API_KEY,
     project_id=settings.RECALLRAI_PROJECT_ID,
+    timeout=60,
 )
 oai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
