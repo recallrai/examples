@@ -1,13 +1,17 @@
 import openai
 import requests
 from config import get_settings
-from flask import Flask, request, jsonify
+from logger import get_logger
+from fastapi import FastAPI, HTTPException
+from models import WebhookData, WebhookResponse, WatiApiResponse, HealthResponse
+from typing import Optional
 from recallrai import RecallrAI
 from recallrai.models import SessionStatus
 from recallrai.exceptions import UserNotFoundError
 
 settings = get_settings()
-app = Flask(__name__)
+logger = get_logger()
+app = FastAPI(title="WhatsApp Customer Support Bot with WATI Integration", version="1.0.0")
 
 # Initialize clients
 rai_client = RecallrAI(
@@ -16,7 +20,7 @@ rai_client = RecallrAI(
 )
 oai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
-def send_whatsapp_message(phone_number, message, reply_context_id):
+def send_whatsapp_message(phone_number: str, message: str, reply_context_id: Optional[str] = None) -> WatiApiResponse:
     """Send message via WATI API"""
     url = f"{settings.WATI_BASE_URL}/sendSessionMessage/{phone_number}"
     headers = {
@@ -30,11 +34,16 @@ def send_whatsapp_message(phone_number, message, reply_context_id):
         params["replyContextId"] = reply_context_id
     
     response = requests.post(url, params=params, headers=headers)
-    print(f"Response from WATI: {response.status_code} - {response.text}")
+    logger.info(f"Response from WATI: {response.status_code} - {response.text}")
+    
+    if response.status_code == 200:
+        return WatiApiResponse(**response.json())
+    else:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
 
 def process_user_message(phone_number, message_text, reply_context_id=None):
     """Process incoming WhatsApp message"""
-    user_id = f"whatsapp_{phone_number}_new_2"
+    user_id = f"whatsapp_{phone_number}_prod"
     
     # Get or create user
     try:
@@ -122,56 +131,50 @@ def process_user_message(phone_number, message_text, reply_context_id=None):
     session.add_assistant_message(assistant_message)
     
     # Send response via WhatsApp
-    print(f"Assistant [{phone_number}]: {assistant_message}")
+    logger.info(f"Assistant [{phone_number}]: {assistant_message}")
     send_whatsapp_message(phone_number, assistant_message, reply_context_id)
     
     return assistant_message
 
-@app.route('/webhook', methods=['POST'])
-def wati_webhook():
+@app.post("/webhook", response_model=WebhookResponse)
+async def wati_webhook(data: WebhookData) -> WebhookResponse:
     """Webhook to receive WATI messages"""
     try:
-        data = request.json
-                
         # Check if it's an incoming message (not from us)
-        if data.get('eventType') == 'message' and data.get('owner') == False:
-            phone_number = data.get('waId')
+        if data.eventType == 'message' and data.owner == False:
+            phone_number = data.waId
             # Ignore messages from phone numbers not in the allowed list
             if phone_number not in settings.ALLOWED_PHONE_NUMBERS:
-                print(f"Ignoring message from phone number: {phone_number}")
-                return jsonify({"status": "ignored", "reason": "phone number not allowed"})
+                logger.info(f"Ignoring message from phone number: {phone_number}")
+                return WebhookResponse(status="ignored", reason="phone number not allowed")
             
-            print(f"Received webhook data: {data}")
+            logger.info(f"Received webhook data: {data.model_dump_json()}")
 
             # Extract message text based on message type
             message_text = None
-            message_type = data.get('type')
+            message_type = data.type
             
             if message_type == 'text':
-                message_text = data.get('text')
-            elif message_type == 'button' and data.get('buttonReply'):
-                message_text = data['buttonReply'].get('text')
-            elif message_type == 'list' and data.get('listReply'):
-                message_text = data['listReply'].get('title')
+                message_text = data.text
+            elif message_type == 'button' and data.buttonReply:
+                message_text = data.buttonReply.get('text')
+            elif message_type == 'list' and data.listReply:
+                message_text = data.listReply.get('title')
             
             if phone_number and message_text:
                 # Process the message
-                # response = process_user_message(phone_number, message_text)
-                response = process_user_message(phone_number, message_text, data.get('whatsappMessageId'))
-                return jsonify({"status": "success", "response": response}), 200
+                response = process_user_message(phone_number, message_text, data.whatsappMessageId)
+                return WebhookResponse(status="success", response=response)
             else:
-                print(f"Missing phone_number ({phone_number}) or message_text ({message_text})")
-                return jsonify({"status": "ignored", "reason": "missing required fields"}), 200
+                logger.warning(f"Missing phone_number ({phone_number}) or message_text ({message_text})")
+                return WebhookResponse(status="ignored", reason="missing required fields")
         
-        return jsonify({"status": "ignored", "reason": "not an incoming message"}), 200
+        return WebhookResponse(status="ignored", reason="not an incoming message")
         
     except Exception as e:
-        print(f"Error processing webhook: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 200
+        logger.error(f"Error processing webhook: {e}")
+        return WebhookResponse(status="error", message=str(e))
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "healthy"})
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8000, debug=True)
+@app.get("/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
+    return HealthResponse(status="healthy")
