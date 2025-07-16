@@ -1,13 +1,13 @@
 import openai
-import requests
 from config import get_settings
 from logger import get_logger
 from fastapi import FastAPI, HTTPException
-from models import WebhookData, WebhookResponse, WatiApiResponse, HealthResponse
+from models import WebhookData, WebhookResponse, WatiSendMessageRequest, WatiApiResponse, HealthResponse
 from typing import Optional
 from recallrai import RecallrAI
 from recallrai.models import SessionStatus
 from recallrai.exceptions import UserNotFoundError
+import httpx
 
 settings = get_settings()
 logger = get_logger()
@@ -18,30 +18,31 @@ rai_client = RecallrAI(
     api_key=settings.RECALLRAI_API_KEY,
     project_id=settings.RECALLRAI_PROJECT_ID,
 )
-oai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+oai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-def send_whatsapp_message(phone_number: str, message: str, reply_context_id: Optional[str] = None) -> WatiApiResponse:
+async def send_whatsapp_message(data: WatiSendMessageRequest) -> WatiApiResponse:
     """Send message via WATI API"""
-    url = f"{settings.WATI_BASE_URL}/sendSessionMessage/{phone_number}"
+    url = f"{settings.WATI_BASE_URL}/sendSessionMessage/{data.phone_number}"
     headers = {
         "Authorization": settings.WATI_API_TOKEN,
         "Content-Type": "application/json"
     }
     params = {
-        "messageText": message,
+        "messageText": data.message_text,
     }
-    if reply_context_id:
-        params["replyContextId"] = reply_context_id
+    if data.reply_context_id:
+        params["replyContextId"] = data.reply_context_id
     
-    response = requests.post(url, params=params, headers=headers)
-    logger.info(f"Response from WATI: {response.status_code} - {response.text}")
-    
-    if response.status_code == 200:
-        return WatiApiResponse(**response.json())
-    else:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, params=params, headers=headers)
+        logger.info(f"Response from WATI: {response.status_code} - {response.text}")
+        
+        if response.status_code == 200:
+            return WatiApiResponse(**response.json())
+        else:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
 
-def process_user_message(phone_number, message_text, reply_context_id=None):
+async def process_user_message(phone_number: str, message_text: str, reply_context_id: Optional[str] = None) -> str:
     """Process incoming WhatsApp message"""
     user_id = f"whatsapp_{phone_number}_prod"
     
@@ -78,45 +79,44 @@ def process_user_message(phone_number, message_text, reply_context_id=None):
     
     # Create system prompt with context
     system_prompt = f"""You are Zostel's Customer Support Assistant, known as a Zobu, equipped with advanced AI and full access to a comprehensive memory database for detailed historical context and customer profiles.
-    You have access to a long term memory system which helps you recall past interactions and customer preferences.
-    
-    MEMORIES ABOUT THE USER:
-    {context.context}
-    
-    Your primary objective is to resolve customer queries swiftly, accurately, and empathetically by following the Zobu Protocol:
-        1.	Greeting and Acknowledgement:
-            •	Greet customers warmly using "Zo Zo ".
-            •	Recognize their past interactions and thank them for reaching out.
-        2.	Probe and Understand:
-            •	Ask relevant, empathetic questions to ensure full clarity of the customer's issue.
-        3.	Empathy and Ownership:
-            •	Express genuine empathy for issues raised and confirm that the issue is being addressed responsibly.
-        4.	Action and Verification:
-            •	Clearly outline the steps you'll take to resolve the issue.
-            •	Verify information with relevant property teams via Slack channels as needed.
-        5.	Resolution and Closure:
-            •	Inform the customer promptly of the resolution.
-            •	Ensure the conversation ends positively with Zobu always having the last message, using "Zo Zo Zo" or "Welcome" to conclude the interaction.
-        6.	Tagging and Documentation:
-            •	Use appropriate tags (#URGENT, #MODIFICATIONS, #ONGOING, #ESCALATION, #FEEDBACK, #REFUND).
-            •	Document interactions meticulously, including relevant Slack message links in the NOTES section.
-        7.	Communication Guidelines:
-            •	Maintain professional yet engaging, friendly, and concise communication.
-            •	Avoid transferring conversations unnecessarily; seek solutions proactively through existing resources.
-        8.	Tools Utilization:
-            •	Leverage tools provided (WATI, PMS, admin.zostel.com, Slack channels).
-        9.	Collaboration:
-            •	Actively participate in shift handovers, ensuring clear communication of ongoing tasks.
-            •	Engage proactively during powerplay overlaps to efficiently clear backlog.
-        10.	Continuous Learning:
-            •	Regularly update yourself with latest protocols, policies, and case-specific learnings available in resources like Ezee tutorials and internal documentation.
+You have access to a long term memory system which helps you recall past interactions and customer preferences.
 
-    Ensure all interactions reflect Zostel's vibrant, community-driven ethos, and strive for excellence in customer satisfaction.
-    Only give short and concise responses, avoiding unnecessary details. 
-    """
+MEMORIES ABOUT THE USER:
+{context.context}
+
+Your primary objective is to resolve customer queries swiftly, accurately, and empathetically by following the Zobu Protocol:
+    1.	Greeting and Acknowledgement:
+        •	Greet customers warmly using "Zo Zo ".
+        •	Recognize their past interactions and thank them for reaching out.
+    2.	Probe and Understand:
+        •	Ask relevant, empathetic questions to ensure full clarity of the customer's issue.
+    3.	Empathy and Ownership:
+        •	Express genuine empathy for issues raised and confirm that the issue is being addressed responsibly.
+    4.	Action and Verification:
+        •	Clearly outline the steps you'll take to resolve the issue.
+        •	Verify information with relevant property teams via Slack channels as needed.
+    5.	Resolution and Closure:
+        •	Inform the customer promptly of the resolution.
+        •	Ensure the conversation ends positively with Zobu always having the last message, using "Zo Zo Zo" or "Welcome" to conclude the interaction.
+    6.	Tagging and Documentation:
+        •	Use appropriate tags (#URGENT, #MODIFICATIONS, #ONGOING, #ESCALATION, #FEEDBACK, #REFUND).
+        •	Document interactions meticulously, including relevant Slack message links in the NOTES section.
+    7.	Communication Guidelines:
+        •	Maintain professional yet engaging, friendly, and concise communication.
+        •	Avoid transferring conversations unnecessarily; seek solutions proactively through existing resources.
+    8.	Tools Utilization:
+        •	Leverage tools provided (WATI, PMS, admin.zostel.com, Slack channels).
+    9.	Collaboration:
+        •	Actively participate in shift handovers, ensuring clear communication of ongoing tasks.
+        •	Engage proactively during powerplay overlaps to efficiently clear backlog.
+    10.	Continuous Learning:
+        •	Regularly update yourself with latest protocols, policies, and case-specific learnings available in resources like Ezee tutorials and internal documentation.
+
+Ensure all interactions reflect Zostel's vibrant, community-driven ethos, and strive for excellence in customer satisfaction.
+Only give short and concise responses, avoiding unnecessary details."""
     
     # Get LLM response
-    response = oai_client.chat.completions.create(
+    response = await oai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -132,7 +132,11 @@ def process_user_message(phone_number, message_text, reply_context_id=None):
     
     # Send response via WhatsApp
     logger.info(f"Assistant [{phone_number}]: {assistant_message}")
-    send_whatsapp_message(phone_number, assistant_message, reply_context_id)
+    await send_whatsapp_message(WatiSendMessageRequest(
+        phone_number=phone_number,
+        message_text=assistant_message,
+        reply_context_id=reply_context_id
+    ))
     
     return assistant_message
 
@@ -163,8 +167,8 @@ async def wati_webhook(data: WebhookData) -> WebhookResponse:
             
             if phone_number and message_text:
                 # Process the message
-                response = process_user_message(phone_number, message_text, data.whatsappMessageId)
-                return WebhookResponse(status="success", response=response)
+                response = await process_user_message(phone_number, message_text, data.whatsappMessageId)
+                return WebhookResponse(status="success", reason=f"Assistant [{phone_number}]: {response}")
             else:
                 logger.warning(f"Missing phone_number ({phone_number}) or message_text ({message_text})")
                 return WebhookResponse(status="ignored", reason="missing required fields")
@@ -173,7 +177,7 @@ async def wati_webhook(data: WebhookData) -> WebhookResponse:
         
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
-        return WebhookResponse(status="error", message=str(e))
+        return WebhookResponse(status="error", reason=str(e))
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:

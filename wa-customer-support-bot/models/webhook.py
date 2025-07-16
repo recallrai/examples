@@ -33,6 +33,4 @@ class WebhookData(BaseModel):
 
 class WebhookResponse(BaseModel):
     status: str
-    response: Optional[str] = None
     reason: Optional[str] = None
-    message: Optional[str] = None

@@ -48,9 +48,10 @@ class WatiApiResponse(BaseModel):
     result: str
     message: WatiMessage
 
-class SendMessageRequest(BaseModel):
-    messageText: str
-    replyContextId: Optional[str] = None
+class WatiSendMessageRequest(BaseModel):
+    phone_number: str
+    message_text: str
+    reply_context_id: Optional[str] = None
 
 class HealthResponse(BaseModel):
     status: str
