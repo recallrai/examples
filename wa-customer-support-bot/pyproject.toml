@@ -12,8 +12,9 @@ dependencies = [
     "recallrai (>=0.1.1,<0.2.0)",
     "openai (>=1.78.1,<2.0.0)",
     "pydantic-settings (>=2.9.1,<3.0.0)",
-    "flask (>=3.1.1,<4.0.0)",
-    "requests (>=2.32.4,<3.0.0)"
+    "requests (>=2.32.4,<3.0.0)",
+    "colorlog (>=6.9.0,<7.0.0)",
+    "fastapi (>=0.116.1,<0.117.0)"
 ]
 
 [build-system]
