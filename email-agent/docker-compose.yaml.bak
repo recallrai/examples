@@ -1,6 +1,6 @@
 services:
   recallrai-demo-email-agent:
-    image: recallrai/demo-email-agent:latest
+    image: recallrai/recallrai-demo-email-agent:latest
     container_name: recallrai-demo-email-agent
     restart: unless-stopped
     build:

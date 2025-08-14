@@ -1,6 +1,6 @@
 services:
   recallrai-wa-wati-customer-support-bot-demo:
-    image: recallrai/demo-wa-wati-customer-support-bot:latest
+    image: recallrai/recallrai-wa-wati-customer-support-bot-demo:latest
     container_name: recallrai-wa-wati-customer-support-bot-demo
     restart: unless-stopped
     build:
